@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
-import { Users, Search, Award, CheckCircle2, Clock, XCircle, ArrowLeft } from 'lucide-react';
+import { Users, Search, ArrowLeft } from 'lucide-react';
 
 const AdminStudentsPage = () => {
   const [students, setStudents] = useState([]);
@@ -17,8 +17,8 @@ const AdminStudentsPage = () => {
       if (res.data.success) {
         setStudents(res.data.students);
       }
-    } catch (err) {
-      console.error('Failed to load students:', err);
+    } catch {
+      console.warn('Student directory request failed.');
       setError('Failed to retrieve registered students from MongoDB Atlas.');
     } finally {
       setLoading(false);

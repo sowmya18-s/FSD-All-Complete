@@ -4,10 +4,10 @@
   "description": "A College-Level MERN Mini Project for Digital Certificate Verification with MongoDB Atlas",
   "scripts": {
     "start": "node backend/server.js",
-    "backend": "cd backend && npm run dev",
-    "frontend": "cd frontend && npm run dev",
-    "seed": "cd backend && npm run seed",
-    "install-all": "npm install && cd backend && npm install && cd ../frontend && npm install"
+    "backend": "npm --prefix backend run dev",
+    "frontend": "npm --prefix frontend run dev",
+    "seed": "npm --prefix backend run seed",
+    "install-all": "npm --prefix backend install && npm --prefix frontend install"
   },
   "keywords": ["mern", "certificate-verification", "mongodb-atlas", "express", "react", "nodejs"],
   "author": "",

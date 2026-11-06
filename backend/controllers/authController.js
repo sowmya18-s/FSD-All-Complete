@@ -1,56 +1,50 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const { respondWithControllerError } = require('../utils/controllerError');
 
-/**
- * Generate signed JWT Token
- */
-const generateToken = (userId, role) => {
-  return jwt.sign(
-    { id: userId, role },
-    process.env.JWT_SECRET || 'YOUR_SECRET_KEY',
-    { expiresIn: '7d' }
-  );
-};
+const generateToken = (userId, role) =>
+  jwt.sign({ id: userId, role }, process.env.JWT_SECRET, { expiresIn: '7d' });
 
-/**
- * @desc    Register a new student
- * @route   POST /api/auth/register
- * @access  Public
- */
+const validateCredentials = (name, email, password) =>
+  typeof name === 'string' &&
+  name.trim().length > 0 &&
+  name.trim().length <= 120 &&
+  typeof email === 'string' &&
+  email.trim().length <= 254 &&
+  typeof password === 'string' &&
+  password.length >= 8 &&
+  Buffer.byteLength(password, 'utf8') <= 72;
+
 const register = async (req, res) => {
+  const { name, email, password } = req.body || {};
+  if (!validateCredentials(name, email, password)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Provide a name, valid email, and password between 8 and 72 UTF-8 bytes.',
+    });
+  }
+
   try {
-    const { name, email, password } = req.body;
-
-    if (!name || !email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide full name, email, and password.',
-      });
-    }
-
-    // Check if user already exists
-    const existingUser = await User.findOne({ email: email.toLowerCase().trim() });
+    const normalizedEmail = email.trim().toLowerCase();
+    const existingUser = await User.findOne({ email: normalizedEmail });
     if (existingUser) {
-      return res.status(400).json({
+      return res.status(409).json({
         success: false,
         message: 'An account with this email address already exists.',
       });
     }
 
-    // Security Rule: Public registration strictly creates 'student' role only
     const user = await User.create({
       name: name.trim(),
-      email: email.toLowerCase().trim(),
+      email: normalizedEmail,
       password,
-      role: 'student', // Admin creation is strictly prohibited via public register endpoint
+      role: 'student',
     });
-
-    const token = generateToken(user._id, user.role);
 
     return res.status(201).json({
       success: true,
-      message: 'Student account registered successfully!',
-      token,
+      message: 'Student account registered successfully.',
+      token: generateToken(user._id, user.role),
       user: {
         _id: user._id,
         userId: user.userId,
@@ -61,54 +55,44 @@ const register = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Registration Error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Server error occurred during registration.',
-    });
+    return respondWithControllerError(
+      res,
+      error,
+      'Registration error',
+      'Unable to register this account.'
+    );
   }
 };
 
-/**
- * @desc    Authenticate user (student or admin) & get token
- * @route   POST /api/auth/login
- * @access  Public
- */
 const login = async (req, res) => {
+  const { email, password } = req.body || {};
+  if (
+    typeof email !== 'string' ||
+    !email.trim() ||
+    email.length > 254 ||
+    typeof password !== 'string' ||
+    !password ||
+    Buffer.byteLength(password, 'utf8') > 72
+  ) {
+    return res.status(400).json({
+      success: false,
+      message: 'Please enter a valid email address and password.',
+    });
+  }
+
   try {
-    const { email, password } = req.body;
-
-    if (!email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please enter both email and password.',
-      });
-    }
-
-    // Find user by email including password field
-    const user = await User.findOne({ email: email.toLowerCase().trim() }).select('+password');
-    if (!user) {
+    const user = await User.findOne({ email: email.trim().toLowerCase() }).select('+password');
+    if (!user || !(await user.comparePassword(password))) {
       return res.status(401).json({
         success: false,
         message: 'Invalid email or password credentials.',
       });
     }
-
-    // Check password match
-    const isMatch = await user.comparePassword(password);
-    if (!isMatch) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid email or password credentials.',
-      });
-    }
-
-    const token = generateToken(user._id, user.role);
 
     return res.status(200).json({
       success: true,
-      message: `Welcome back, ${user.name}! Logged in as ${user.role}.`,
-      token,
+      message: `Welcome back, ${user.name}!`,
+      token: generateToken(user._id, user.role),
       user: {
         _id: user._id,
         userId: user.userId,
@@ -119,31 +103,24 @@ const login = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Login Error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Server error occurred during login.',
-    });
+    return respondWithControllerError(res, error, 'Login error', 'Unable to sign in.');
   }
 };
 
-/**
- * @desc    Get currently logged in user profile
- * @route   GET /api/auth/me
- * @access  Private
- */
 const getMe = async (req, res) => {
   try {
     const user = await User.findById(req.user._id).select('-password');
-    return res.status(200).json({
-      success: true,
-      user,
-    });
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found.' });
+    }
+    return res.status(200).json({ success: true, user });
   } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to retrieve user profile.',
-    });
+    return respondWithControllerError(
+      res,
+      error,
+      'User profile error',
+      'Failed to retrieve user profile.'
+    );
   }
 };
 

@@ -17,6 +17,7 @@ const certificateSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Certificate title is required'],
       trim: true,
+      maxlength: [200, 'Certificate title must be 200 characters or fewer'],
       index: true,
     },
     certificateType: {
@@ -41,6 +42,7 @@ const certificateSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Issuing organization name is required'],
       trim: true,
+      maxlength: [200, 'Organization must be 200 characters or fewer'],
     },
     issueDate: {
       type: Date,
@@ -50,6 +52,7 @@ const certificateSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Certificate registration/serial number is required'],
       trim: true,
+      maxlength: [100, 'Certificate number must be 100 characters or fewer'],
       uppercase: true,
       unique: true,
       index: true,

@@ -911,6 +911,21 @@ textarea.form-control {
 @media (max-width: 768px) {
   .navbar-container {
     padding: 0 1rem;
+    height: auto;
+    min-height: 70px;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    padding-top: 0.75rem;
+    padding-bottom: 0.75rem;
+  }
+  .navbar-container > div:last-child {
+    width: 100%;
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+  .nav-links {
+    flex-wrap: wrap;
+    gap: 0.25rem;
   }
   .hero-title {
     font-size: 2rem;

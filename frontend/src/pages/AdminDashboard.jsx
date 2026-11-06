@@ -12,9 +12,6 @@ import {
   XCircle,
   FileCheck,
   BarChart3,
-  Search,
-  ExternalLink,
-  ShieldCheck,
   ArrowRight,
 } from 'lucide-react';
 
@@ -40,8 +37,8 @@ const AdminDashboard = () => {
         setStats(res.data.stats);
         setRecentSubmissions(res.data.recentSubmissions || []);
       }
-    } catch (err) {
-      console.error('Failed to load admin stats:', err);
+    } catch {
+      console.warn('Administrator dashboard request failed.');
       setError('Failed to fetch administrator statistics from MongoDB Atlas.');
     } finally {
       setLoading(false);

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { UserPlus, User, Mail, Lock, AlertCircle, Shield } from 'lucide-react';
+import { UserPlus, AlertCircle, Shield } from 'lucide-react';
 
 const RegisterPage = () => {
   const [formData, setFormData] = useState({
@@ -30,8 +30,8 @@ const RegisterPage = () => {
       return;
     }
 
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters long.');
+    if (password.length < 8 || new TextEncoder().encode(password).length > 72) {
+      setError('Password must be between 8 and 72 UTF-8 bytes.');
       return;
     }
 
@@ -125,7 +125,7 @@ const RegisterPage = () => {
               type="password"
               name="password"
               className="form-control"
-              placeholder="Minimum 6 characters"
+              placeholder="8 to 72 UTF-8 bytes"
               value={formData.password}
               onChange={handleChange}
               required

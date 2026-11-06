@@ -25,6 +25,14 @@ const CERTIFICATE_TYPES = [
   'Other',
 ];
 
+const escapeCsvCell = (value) => {
+  let text = String(value ?? '');
+  if (/^[\u0000-\u0020]*[=+\-@]/.test(text)) {
+    text = `'${text}`;
+  }
+  return `"${text.replace(/"/g, '""')}"`;
+};
+
 const AdminReportsPage = () => {
   const [reportData, setReportData] = useState([]);
   const [summary, setSummary] = useState({
@@ -58,8 +66,8 @@ const AdminReportsPage = () => {
         setReportData(res.data.reportData);
         setSummary(res.data.summary);
       }
-    } catch (err) {
-      console.error('Report fetch error:', err);
+    } catch {
+      console.warn('Certificate report request failed.');
       setError('Failed to generate report from MongoDB Atlas.');
     } finally {
       setLoading(false);
@@ -91,29 +99,31 @@ const AdminReportsPage = () => {
       'Remarks',
     ];
 
-    const csvRows = [headers.join(',')];
+    const csvRows = [headers.map(escapeCsvCell).join(',')];
 
     reportData.forEach((row) => {
       const values = [
-        `"${row.certificateId || ''}"`,
-        `"${row.certificateNumber || ''}"`,
-        `"${(row.title || '').replace(/"/g, '""')}"`,
-        `"${row.type || ''}"`,
-        `"${(row.organization || '').replace(/"/g, '""')}"`,
-        `"${(row.studentName || '').replace(/"/g, '""')}"`,
-        `"${row.studentEmail || ''}"`,
-        `"${row.issueDate ? new Date(row.issueDate).toLocaleDateString() : ''}"`,
-        `"${row.status || ''}"`,
-        `"${(row.verifiedBy || '').replace(/"/g, '""')}"`,
-        `"${(row.remarks || '').replace(/"/g, '""')}"`,
+        row.certificateId,
+        row.certificateNumber,
+        row.title,
+        row.type,
+        row.organization,
+        row.studentName,
+        row.studentEmail,
+        row.issueDate ? new Date(row.issueDate).toLocaleDateString() : '',
+        row.status,
+        row.verifiedBy,
+        row.remarks,
       ];
-      csvRows.push(values.join(','));
+      csvRows.push(values.map(escapeCsvCell).join(','));
     });
 
-    const csvContent = 'data:text/csv;charset=utf-8,' + csvRows.join('\n');
-    const encodedUri = encodeURI(csvContent);
+    const csvContent = new Blob([`\uFEFF${csvRows.join('\r\n')}`], {
+      type: 'text/csv;charset=utf-8',
+    });
+    const downloadUrl = URL.createObjectURL(csvContent);
     const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
+    link.setAttribute('href', downloadUrl);
     link.setAttribute(
       'download',
       `Certificate_Audit_Report_${new Date().toISOString().split('T')[0]}.csv`
@@ -121,6 +131,7 @@ const AdminReportsPage = () => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(downloadUrl), 0);
   };
 
   const handlePrint = () => {

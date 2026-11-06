@@ -1,14 +1,17 @@
 import axios from 'axios';
 
-// Create Axios client instance
+const configuredApiUrl = import.meta.env.VITE_API_URL;
+if (!configuredApiUrl && !import.meta.env.DEV) {
+  throw new Error('VITE_API_URL must be set to the deployed backend API URL.');
+}
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
+  baseURL: (configuredApiUrl || '/api').replace(/\/+$/, ''),
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Interceptor to attach Authorization Bearer token to every request
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
@@ -20,12 +23,10 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Interceptor to handle authentication expiration
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response && error.response.status === 401) {
-      // If unauthorized and we're not on the login/register page, clear token
       const currentPath = window.location.pathname;
       if (currentPath !== '/login' && currentPath !== '/register' && currentPath !== '/') {
         localStorage.removeItem('token');

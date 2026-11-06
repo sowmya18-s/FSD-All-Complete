@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { LogIn, Mail, Lock, AlertCircle, Info, ShieldCheck } from 'lucide-react';
+import { LogIn, AlertCircle } from 'lucide-react';
 
 const LoginPage = () => {
   const [email, setEmail] = useState('');
@@ -36,11 +36,15 @@ const LoginPage = () => {
 
     try {
       const data = await login(email, password);
-      if (data.user?.role === 'admin') {
-        navigate('/admin/dashboard');
-      } else {
-        navigate('/student/dashboard');
-      }
+      const defaultDestination =
+        data.user?.role === 'admin' ? '/admin/dashboard' : '/student/dashboard';
+      const requestedPath = location.state?.from?.pathname;
+      const safeRequestedPath =
+        typeof requestedPath === 'string' &&
+        requestedPath.startsWith('/') &&
+        !requestedPath.startsWith('//') &&
+        !requestedPath.includes('\\');
+      navigate(safeRequestedPath ? requestedPath : defaultDestination, { replace: true });
     } catch (err) {
       setError(
         err.response?.data?.message || 'Login failed. Please verify your credentials and try again.'
@@ -48,13 +52,6 @@ const LoginPage = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  // Helper to fill demo admin credentials for testing
-  const fillAdminCredentials = () => {
-    setEmail('admin@certverify.edu');
-    setPassword('Admin@123456');
-    setError('');
   };
 
   return (
@@ -141,34 +138,6 @@ const LoginPage = () => {
           </Link>
         </div>
 
-        {/* Quick Demo Seed helper for examiner / evaluation */}
-        <div
-          style={{
-            marginTop: '1.25rem',
-            padding: '0.85rem',
-            backgroundColor: 'var(--slate-50)',
-            border: '1px dashed var(--slate-300)',
-            borderRadius: 'var(--radius-md)',
-            fontSize: '0.8rem',
-            color: 'var(--slate-600)',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600, marginBottom: '0.35rem' }}>
-            <ShieldCheck size={16} color="var(--primary)" />
-            <span>Administrator Quick Test:</span>
-          </div>
-          <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.75rem', color: 'var(--slate-500)' }}>
-            After running <code>npm run seed</code> in backend:
-          </p>
-          <button
-            type="button"
-            onClick={fillAdminCredentials}
-            className="btn btn-secondary btn-sm"
-            style={{ fontSize: '0.75rem', width: '100%' }}
-          >
-            Auto-Fill Admin Credentials (admin@certverify.edu)
-          </button>
-        </div>
       </div>
     </div>
   );

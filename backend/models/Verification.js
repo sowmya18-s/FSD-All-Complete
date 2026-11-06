@@ -26,6 +26,7 @@ const verificationSchema = new mongoose.Schema(
     remarks: {
       type: String,
       trim: true,
+      maxlength: [2000, 'Remarks must be 2000 characters or fewer'],
       default: '',
     },
   },

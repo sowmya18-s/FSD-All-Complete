@@ -1,100 +1,106 @@
 const path = require('path');
-require('dotenv').config();
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const express = require('express');
 const cors = require('cors');
+const mongoose = require('mongoose');
 const connectDB = require('./config/db');
-
-// Import Route Handlers
 const authRoutes = require('./routes/authRoutes');
 const certificateRoutes = require('./routes/certificateRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const checkDBConnection = require('./middleware/dbCheck');
 
+const jwtSecret = process.env.JWT_SECRET;
+if (!jwtSecret || jwtSecret.length < 32 || jwtSecret.includes('replace-with')) {
+  throw new Error('Set JWT_SECRET to a unique random value of at least 32 characters.');
+}
+
+const port = Number.parseInt(process.env.PORT || '5000', 10);
+if (!Number.isInteger(port) || port < 1 || port > 65535) {
+  throw new Error('PORT must be a valid TCP port.');
+}
+
+const configuredOrigins = (process.env.CLIENT_URL || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+const allowedOrigins = new Set(configuredOrigins);
+if (process.env.NODE_ENV !== 'production') {
+  allowedOrigins.add('http://localhost:5173');
+  allowedOrigins.add('http://127.0.0.1:5173');
+}
+
 const app = express();
-const PORT = process.env.PORT || 5000;
-const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
-
-// Connect to MongoDB Atlas Cloud Database
-connectDB();
-
-// CORS Configuration
+app.disable('x-powered-by');
 app.use(
   cors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps, curl, postman) or matching CLIENT_URL or localhost
-      if (!origin || origin === CLIENT_URL || origin.includes('localhost') || origin.includes('127.0.0.1')) {
-        return callback(null, true);
-      }
-      return callback(null, true); // Permissive for local student development
+    origin(origin, callback) {
+      callback(null, !origin || allowedOrigins.has(origin));
     },
-    credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   })
 );
+app.use(express.json({ limit: '100kb' }));
+app.use(express.urlencoded({ extended: false, limit: '100kb' }));
 
-// Body Parser Middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-// Basic Request Logger for Development
 app.use((req, res, next) => {
-  const timestamp = new Date().toISOString();
-  console.log(`[${timestamp}] ${req.method} ${req.originalUrl}`);
+  console.log(`${new Date().toISOString()} ${req.method} ${req.path}`);
   next();
 });
 
-// API Routes Mount (with database readiness check)
+app.get('/api/health', (req, res) => {
+  const database = mongoose.connection.readyState === 1 ? 'connected' : 'unavailable';
+  return res.status(database === 'connected' ? 200 : 503).json({
+    status: database === 'connected' ? 'ok' : 'unavailable',
+    database,
+    timestamp: new Date().toISOString(),
+  });
+});
+
 app.use('/api/auth', checkDBConnection, authRoutes);
 app.use('/api/certificates', checkDBConnection, certificateRoutes);
 app.use('/api/admin', checkDBConnection, adminRoutes);
 
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.status(200).json({
-    status: 'online',
-    app: 'Digital Certificate Verification Portal API',
-    timestamp: new Date(),
-  });
-});
-
-// Root welcome endpoint
 app.get('/', (req, res) => {
-  res.send(`
-    <html>
-      <head><title>Certificate Verification API</title></head>
-      <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
-        <h1 style="color: #2563eb;">Digital Certificate Verification Portal API</h1>
-        <p>The backend server is running successfully on port ${PORT}.</p>
-        <p>Connect from your React frontend at <a href="${CLIENT_URL}">${CLIENT_URL}</a></p>
-      </body>
-    </html>
-  `);
+  res.json({ name: 'Digital Certificate Verification Portal API', health: '/api/health' });
 });
 
-// 404 Route Handler
 app.use((req, res) => {
-  res.status(404).json({
+  res.status(404).json({ success: false, message: 'Route not found.' });
+});
+
+app.use((error, req, res, next) => {
+  if (res.headersSent) return next(error);
+
+  const status =
+    Number.isInteger(error.status) && error.status >= 400 && error.status < 500
+      ? error.status
+      : 500;
+  if (status < 500) {
+    const message = status === 413 ? 'Request body is too large.' : 'Invalid request.';
+    return res.status(status).json({ success: false, message });
+  }
+
+  console.error(`Unhandled request error: ${error.name || 'Error'}`);
+  return res.status(status).json({
     success: false,
-    message: `API Route ${req.originalUrl} not found on this server.`,
+    message: 'An unexpected server error occurred.',
   });
 });
 
-// Global Error Handler
-app.use((err, req, res, next) => {
-  console.error('Unhandled Server Error:', err.stack);
-  res.status(err.status || 500).json({
-    success: false,
-    message: err.message || 'Internal Server Error',
+const startServer = async () => {
+  await connectDB();
+  return app.listen(port, () => {
+    console.log(`API server listening on port ${port}.`);
   });
-});
+};
 
-// Start Express Server
-app.listen(PORT, () => {
-  console.log('\n======================================================');
-  console.log(` Server is running on port ${PORT}`);
-  console.log(` API URL: http://localhost:${PORT}/api`);
-  console.log(` Frontend Client: ${CLIENT_URL}`);
-  console.log('======================================================\n');
-});
+if (require.main === module) {
+  startServer().catch((error) => {
+    console.error(`Server startup failed: ${error.name || 'Error'}`);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = { app, startServer };

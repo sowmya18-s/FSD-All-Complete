@@ -7,12 +7,9 @@ import {
   Award,
   ShieldCheck,
   Search,
-  CheckCircle,
-  FileCheck,
   Users,
   Database,
   ArrowRight,
-  ExternalLink,
 } from 'lucide-react';
 
 const HomePage = () => {

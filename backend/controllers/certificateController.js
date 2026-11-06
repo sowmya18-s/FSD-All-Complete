@@ -1,5 +1,20 @@
 const Certificate = require('../models/Certificate');
 const Verification = require('../models/Verification');
+const mongoose = require('mongoose');
+const { respondWithControllerError, escapeRegex } = require('../utils/controllerError');
+
+const isCertificateStatus = (status) => ['Pending', 'Verified', 'Rejected'].includes(status);
+const isCertificateType = (type) =>
+  [
+    'Workshop',
+    'Internship',
+    'NPTEL',
+    'Seminar',
+    'Hackathon',
+    'Sports',
+    'Technical Competition',
+    'Other',
+  ].includes(type);
 
 /**
  * @desc    Submit a new certificate
@@ -14,10 +29,17 @@ const createCertificate = async (req, res) => {
       organization,
       issueDate,
       certificateNumber,
-    } = req.body;
+    } = req.body || {};
 
     // Validation
-    if (!certificateTitle || !certificateType || !organization || !issueDate || !certificateNumber) {
+    if (
+      [certificateTitle, certificateType, organization, issueDate, certificateNumber].some(
+        (value) => typeof value !== 'string' || !value.trim()
+      ) ||
+      certificateTitle.length > 200 ||
+      organization.length > 200 ||
+      certificateNumber.length > 100
+    ) {
       return res.status(400).json({
         success: false,
         message: 'All fields (title, type, organization, issue date, certificate number) are required.',
@@ -29,7 +51,7 @@ const createCertificate = async (req, res) => {
     // Check duplicate certificate number
     const existing = await Certificate.findOne({ certificateNumber: cleanCertNumber });
     if (existing) {
-      return res.status(400).json({
+      return res.status(409).json({
         success: false,
         message: `A certificate with number "${cleanCertNumber}" is already registered.`,
       });
@@ -51,11 +73,7 @@ const createCertificate = async (req, res) => {
       certificate,
     });
   } catch (error) {
-    console.error('Create Certificate Error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to submit certificate.',
-    });
+    return respondWithControllerError(res, error, 'Create certificate error', 'Failed to submit certificate.');
   }
 };
 
@@ -70,6 +88,11 @@ const getMyCertificates = async (req, res) => {
 
     const query = { studentId: req.user._id };
 
+    if ((status && status !== 'All' && !isCertificateStatus(status)) ||
+        (type && type !== 'All' && !isCertificateType(type))) {
+      return res.status(400).json({ success: false, message: 'Invalid certificate filter.' });
+    }
+
     if (status && status !== 'All') {
       query.verificationStatus = status;
     }
@@ -78,13 +101,18 @@ const getMyCertificates = async (req, res) => {
       query.certificateType = type;
     }
 
-    if (search && search.trim() !== '') {
-      const searchRegex = new RegExp(search.trim(), 'i');
-      query.$or = [
-        { certificateTitle: searchRegex },
-        { certificateNumber: searchRegex },
-        { organization: searchRegex },
-      ];
+    if (search !== undefined) {
+      if (typeof search !== 'string' || search.length > 100) {
+        return res.status(400).json({ success: false, message: 'Search text is invalid.' });
+      }
+      if (search.trim()) {
+        const searchRegex = new RegExp(escapeRegex(search.trim()), 'i');
+        query.$or = [
+          { certificateTitle: searchRegex },
+          { certificateNumber: searchRegex },
+          { organization: searchRegex },
+        ];
+      }
     }
 
     const certificates = await Certificate.find(query)
@@ -100,11 +128,7 @@ const getMyCertificates = async (req, res) => {
       certificates,
     });
   } catch (error) {
-    console.error('Get My Certificates Error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to retrieve certificates.',
-    });
+    return respondWithControllerError(res, error, 'Get certificates error', 'Failed to retrieve certificates.');
   }
 };
 
@@ -142,11 +166,7 @@ const getStudentStats = async (req, res) => {
       recentCertificates,
     });
   } catch (error) {
-    console.error('Student Stats Error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to load student dashboard statistics.',
-    });
+    return respondWithControllerError(res, error, 'Student stats error', 'Failed to load dashboard statistics.');
   }
 };
 
@@ -163,6 +183,9 @@ const getCertificateById = async (req, res) => {
     if (id.startsWith('CERT-')) {
       certificate = await Certificate.findOne({ certificateId: id });
     } else {
+      if (!mongoose.isValidObjectId(id)) {
+        return res.status(400).json({ success: false, message: 'Certificate ID is invalid.' });
+      }
       certificate = await Certificate.findById(id);
     }
 
@@ -199,11 +222,7 @@ const getCertificateById = async (req, res) => {
       verificationHistory,
     });
   } catch (error) {
-    console.error('Get Certificate By ID Error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to load certificate details.',
-    });
+    return respondWithControllerError(res, error, 'Get certificate error', 'Failed to load certificate details.');
   }
 };
 
@@ -221,7 +240,19 @@ const updateCertificate = async (req, res) => {
       organization,
       issueDate,
       certificateNumber,
-    } = req.body;
+    } = req.body || {};
+
+    if (
+      !mongoose.isValidObjectId(id) ||
+      [certificateTitle, certificateType, organization, issueDate, certificateNumber].some(
+        (value) => typeof value !== 'string' || !value.trim()
+      ) ||
+      certificateTitle.length > 200 ||
+      organization.length > 200 ||
+      certificateNumber.length > 100
+    ) {
+      return res.status(400).json({ success: false, message: 'Certificate details are invalid.' });
+    }
 
     const certificate = await Certificate.findById(id);
 
@@ -262,6 +293,7 @@ const updateCertificate = async (req, res) => {
 
     // Reset status to Pending upon modification so admin can reverify
     certificate.verificationStatus = 'Pending';
+    certificate.latestVerification = null;
 
     await certificate.save();
 
@@ -271,11 +303,7 @@ const updateCertificate = async (req, res) => {
       certificate,
     });
   } catch (error) {
-    console.error('Update Certificate Error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to update certificate.',
-    });
+    return respondWithControllerError(res, error, 'Update certificate error', 'Failed to update certificate.');
   }
 };
 
@@ -287,6 +315,9 @@ const updateCertificate = async (req, res) => {
 const deleteCertificate = async (req, res) => {
   try {
     const { id } = req.params;
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({ success: false, message: 'Certificate ID is invalid.' });
+    }
 
     const certificate = await Certificate.findById(id);
 
@@ -314,11 +345,7 @@ const deleteCertificate = async (req, res) => {
       message: 'Certificate record deleted successfully.',
     });
   } catch (error) {
-    console.error('Delete Certificate Error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to delete certificate.',
-    });
+    return respondWithControllerError(res, error, 'Delete certificate error', 'Failed to delete certificate.');
   }
 };
 
@@ -330,6 +357,9 @@ const deleteCertificate = async (req, res) => {
 const verifyPublicCertificate = async (req, res) => {
   try {
     const { number } = req.params;
+    if (typeof number !== 'string' || !number.trim() || number.length > 100) {
+      return res.status(400).json({ success: false, found: false, message: 'Certificate number is invalid.' });
+    }
 
     const certificate = await Certificate.findOne({
       certificateNumber: number.trim().toUpperCase(),
@@ -366,11 +396,7 @@ const verifyPublicCertificate = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Public Verification Error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Error searching for certificate.',
-    });
+    return respondWithControllerError(res, error, 'Public verification error', 'Unable to search for certificate.');
   }
 };
 

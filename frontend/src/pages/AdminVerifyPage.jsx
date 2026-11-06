@@ -6,14 +6,10 @@ import Modal from '../components/Modal';
 import {
   FileCheck,
   Search,
-  Filter,
-  CheckCircle,
-  XCircle,
   ExternalLink,
   Trash2,
   CheckCircle2,
   AlertCircle,
-  Clock,
 } from 'lucide-react';
 
 const CERTIFICATE_TYPES = [
@@ -62,8 +58,8 @@ const AdminVerifyPage = () => {
       if (res.data.success) {
         setCertificates(res.data.certificates);
       }
-    } catch (err) {
-      console.error('Error fetching admin certificates:', err);
+    } catch {
+      console.warn('Certificate queue request failed.');
       setError('Failed to fetch certificates from MongoDB Atlas.');
     } finally {
       setLoading(false);

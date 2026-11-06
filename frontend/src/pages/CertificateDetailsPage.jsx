@@ -1,21 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import StatusBadge from '../components/StatusBadge';
 import {
   Award,
   ArrowLeft,
-  Calendar,
-  Building,
-  Hash,
-  User,
   ShieldCheck,
   Printer,
-  Clock,
-  CheckCircle2,
-  XCircle,
-  FileText,
 } from 'lucide-react';
 
 const CertificateDetailsPage = () => {
@@ -38,8 +30,8 @@ const CertificateDetailsPage = () => {
           setCertificate(res.data.certificate);
           setVerificationHistory(res.data.verificationHistory || []);
         }
-      } catch (err) {
-        console.error('Error fetching certificate details:', err);
+      } catch {
+        console.warn('Certificate details request failed.');
         setError(
           err.response?.data?.message || 'Failed to retrieve certificate details from database.'
         );

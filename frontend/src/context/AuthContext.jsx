@@ -4,11 +4,16 @@ import api from '../services/api';
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
+  const [token, setToken] = useState(() => localStorage.getItem('token'));
   const [user, setUser] = useState(() => {
-    const savedUser = localStorage.getItem('user');
-    return savedUser ? JSON.parse(savedUser) : null;
+    if (!localStorage.getItem('token')) return null;
+    try {
+      return JSON.parse(localStorage.getItem('user'));
+    } catch {
+      localStorage.removeItem('user');
+      return null;
+    }
   });
-  const [token, setToken] = useState(() => localStorage.getItem('token') || null);
   const [loading, setLoading] = useState(true);
 
   // Validate existing token on mount
@@ -22,8 +27,8 @@ export const AuthProvider = ({ children }) => {
             setUser(res.data.user);
             localStorage.setItem('user', JSON.stringify(res.data.user));
           }
-        } catch (error) {
-          console.error('Session verification failed:', error);
+        } catch {
+          console.warn('Session verification failed. Please sign in again.');
           logout();
         }
       }

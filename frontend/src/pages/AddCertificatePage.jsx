@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import api from '../services/api';
-import { PlusCircle, Award, CheckCircle2, AlertCircle, ArrowLeft } from 'lucide-react';
+import { PlusCircle, CheckCircle2, AlertCircle, ArrowLeft } from 'lucide-react';
 
 const CERTIFICATE_TYPES = [
   'Workshop',

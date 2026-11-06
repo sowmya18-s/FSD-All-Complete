@@ -13,7 +13,6 @@ import {
   ExternalLink,
   AlertCircle,
   CheckCircle2,
-  Calendar,
 } from 'lucide-react';
 
 const CERTIFICATE_TYPES = [
@@ -67,8 +66,8 @@ const MyCertificatesPage = () => {
       if (res.data.success) {
         setCertificates(res.data.certificates);
       }
-    } catch (err) {
-      console.error('Error fetching certificates:', err);
+    } catch {
+      console.warn('Certificate list request failed.');
       setError('Failed to fetch certificates from MongoDB Atlas.');
     } finally {
       setLoading(false);

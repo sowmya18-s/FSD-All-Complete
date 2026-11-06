@@ -1,6 +1,21 @@
 const User = require('../models/User');
 const Certificate = require('../models/Certificate');
 const Verification = require('../models/Verification');
+const mongoose = require('mongoose');
+const { respondWithControllerError, escapeRegex } = require('../utils/controllerError');
+
+const isCertificateStatus = (status) => ['Pending', 'Verified', 'Rejected'].includes(status);
+const isCertificateType = (type) =>
+  [
+    'Workshop',
+    'Internship',
+    'NPTEL',
+    'Seminar',
+    'Hackathon',
+    'Sports',
+    'Technical Competition',
+    'Other',
+  ].includes(type);
 
 /**
  * @desc    Get admin dashboard metrics & recent submissions
@@ -44,11 +59,12 @@ const getAdminDashboardStats = async (req, res) => {
       recentSubmissions,
     });
   } catch (error) {
-    console.error('Admin Dashboard Stats Error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to retrieve admin dashboard metrics.',
-    });
+    return respondWithControllerError(
+      res,
+      error,
+      'Admin dashboard stats error',
+      'Failed to retrieve admin dashboard metrics.'
+    );
   }
 };
 
@@ -63,6 +79,11 @@ const getAllCertificates = async (req, res) => {
 
     const query = {};
 
+    if ((status && status !== 'All' && !isCertificateStatus(status)) ||
+        (type && type !== 'All' && !isCertificateType(type))) {
+      return res.status(400).json({ success: false, message: 'Invalid certificate filter.' });
+    }
+
     if (status && status !== 'All') {
       query.verificationStatus = status;
     }
@@ -73,22 +94,30 @@ const getAllCertificates = async (req, res) => {
 
     // If searching, check certificate title, number, organization, or student name
     let matchingStudentIds = [];
-    if (search && search.trim() !== '') {
-      const searchRegex = new RegExp(search.trim(), 'i');
+    if (search !== undefined) {
+      if (typeof search !== 'string' || search.length > 100) {
+        return res.status(400).json({ success: false, message: 'Search text is invalid.' });
+      }
 
-      const matchedUsers = await User.find({
-        role: 'student',
-        $or: [{ name: searchRegex }, { email: searchRegex }],
-      }).select('_id');
+      const searchRegex = search.trim()
+        ? new RegExp(escapeRegex(search.trim()), 'i')
+        : null;
 
-      matchingStudentIds = matchedUsers.map((u) => u._id);
+      if (searchRegex) {
+        const matchedUsers = await User.find({
+          role: 'student',
+          $or: [{ name: searchRegex }, { email: searchRegex }],
+        }).select('_id');
 
-      query.$or = [
-        { certificateTitle: searchRegex },
-        { certificateNumber: searchRegex },
-        { organization: searchRegex },
-        { studentId: { $in: matchingStudentIds } },
-      ];
+        matchingStudentIds = matchedUsers.map((u) => u._id);
+
+        query.$or = [
+          { certificateTitle: searchRegex },
+          { certificateNumber: searchRegex },
+          { organization: searchRegex },
+          { studentId: { $in: matchingStudentIds } },
+        ];
+      }
     }
 
     let sortOption = { createdAt: -1 };
@@ -110,11 +139,7 @@ const getAllCertificates = async (req, res) => {
       certificates,
     });
   } catch (error) {
-    console.error('Get All Certificates Error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to retrieve certificates.',
-    });
+    return respondWithControllerError(res, error, 'Get all certificates error', 'Failed to retrieve certificates.');
   }
 };
 
@@ -126,12 +151,22 @@ const getAllCertificates = async (req, res) => {
 const verifyCertificate = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, remarks } = req.body;
+    const { status, remarks } = req.body || {};
 
-    if (!['Verified', 'Rejected', 'Pending'].includes(status)) {
+    if (!mongoose.isValidObjectId(id) || !['Verified', 'Rejected', 'Pending'].includes(status)) {
       return res.status(400).json({
         success: false,
-        message: 'Status must be one of: Verified, Rejected, or Pending.',
+        message: 'Certificate ID or status is invalid.',
+      });
+    }
+    if (
+      typeof remarks !== 'string' ||
+      !remarks.trim() ||
+      remarks.length > 2000
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'Provide verification remarks of 1 to 2000 characters.',
       });
     }
 
@@ -148,7 +183,7 @@ const verifyCertificate = async (req, res) => {
       certificateId: certificate._id,
       verifiedBy: req.user._id,
       verificationDate: new Date(),
-      remarks: remarks ? remarks.trim() : `Status marked as ${status} by administrator.`,
+      remarks: remarks.trim(),
     });
 
     // Update Certificate document
@@ -166,11 +201,7 @@ const verifyCertificate = async (req, res) => {
       verification: verificationRecord,
     });
   } catch (error) {
-    console.error('Verify Certificate Error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to update certificate verification status.',
-    });
+    return respondWithControllerError(res, error, 'Verify certificate error', 'Failed to update verification status.');
   }
 };
 
@@ -224,11 +255,7 @@ const getAllStudents = async (req, res) => {
       students: studentStats,
     });
   } catch (error) {
-    console.error('Get All Students Error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to retrieve student directory.',
-    });
+    return respondWithControllerError(res, error, 'Get students error', 'Failed to retrieve student directory.');
   }
 };
 
@@ -240,6 +267,9 @@ const getAllStudents = async (req, res) => {
 const deleteCertificateAdmin = async (req, res) => {
   try {
     const { id } = req.params;
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({ success: false, message: 'Certificate ID is invalid.' });
+    }
 
     const certificate = await Certificate.findById(id);
     if (!certificate) {
@@ -258,11 +288,7 @@ const deleteCertificateAdmin = async (req, res) => {
       message: `Certificate "${certificate.certificateTitle}" and its verification history were deleted successfully.`,
     });
   } catch (error) {
-    console.error('Admin Delete Certificate Error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to delete certificate.',
-    });
+    return respondWithControllerError(res, error, 'Admin delete certificate error', 'Failed to delete certificate.');
   }
 };
 
@@ -277,6 +303,11 @@ const getCertificateReport = async (req, res) => {
 
     const query = {};
 
+    if ((status && status !== 'All' && !isCertificateStatus(status)) ||
+        (type && type !== 'All' && !isCertificateType(type))) {
+      return res.status(400).json({ success: false, message: 'Invalid report filter.' });
+    }
+
     if (status && status !== 'All') {
       query.verificationStatus = status;
     }
@@ -287,8 +318,23 @@ const getCertificateReport = async (req, res) => {
 
     if (startDate || endDate) {
       query.issueDate = {};
-      if (startDate) query.issueDate.$gte = new Date(startDate);
-      if (endDate) query.issueDate.$lte = new Date(endDate);
+      if (
+        (startDate && (typeof startDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(startDate))) ||
+        (endDate && (typeof endDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)))
+      ) {
+        return res.status(400).json({ success: false, message: 'Report dates must use YYYY-MM-DD format.' });
+      }
+      if (startDate) query.issueDate.$gte = new Date(`${startDate}T00:00:00.000Z`);
+      if (endDate) query.issueDate.$lte = new Date(`${endDate}T23:59:59.999Z`);
+      if (
+        (startDate && Number.isNaN(query.issueDate.$gte.getTime())) ||
+        (endDate && Number.isNaN(query.issueDate.$lte.getTime())) ||
+        (startDate && query.issueDate.$gte.toISOString().slice(0, 10) !== startDate) ||
+        (endDate && query.issueDate.$lte.toISOString().slice(0, 10) !== endDate) ||
+        (startDate && endDate && startDate > endDate)
+      ) {
+        return res.status(400).json({ success: false, message: 'Report date range is invalid.' });
+      }
     }
 
     const certificates = await Certificate.find(query)
@@ -328,11 +374,7 @@ const getCertificateReport = async (req, res) => {
       })),
     });
   } catch (error) {
-    console.error('Certificate Report Error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to generate certificate report.',
-    });
+    return respondWithControllerError(res, error, 'Certificate report error', 'Failed to generate certificate report.');
   }
 };
 

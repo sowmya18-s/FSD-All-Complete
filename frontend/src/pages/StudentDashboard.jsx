@@ -13,7 +13,6 @@ import {
   FileText,
   ArrowRight,
   ExternalLink,
-  Calendar,
 } from 'lucide-react';
 
 const StudentDashboard = () => {
@@ -37,8 +36,8 @@ const StudentDashboard = () => {
         setStats(res.data.stats);
         setRecentCertificates(res.data.recentCertificates || []);
       }
-    } catch (err) {
-      console.error('Failed to load dashboard statistics:', err);
+    } catch {
+      console.warn('Dashboard request failed.');
       setError('Unable to load dashboard data from MongoDB. Please check backend connection.');
     } finally {
       setLoading(false);
